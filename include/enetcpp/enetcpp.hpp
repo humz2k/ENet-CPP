@@ -496,6 +496,71 @@ class Host {
     void flush() { enet_host_flush(m_host); }
 
     /**
+     * @brief Broadcasts a packet to all connected peers.
+     *
+     * This function broadcasts a packet to all peers connected to the host on
+     * a specific channel. After the packet is sent, the packet is flagged with
+     * `set_dont_free()` to prevent it from being freed immediately.
+     *
+     * @param packet The packet to be broadcasted.
+     * @param channel The channel on which the packet will be broadcast.
+     *                Defaults to 0.
+     */
+    void broadcast(Packet& packet, uint8 channel = 0) {
+        enet_host_broadcast(m_host, channel, packet.get());
+        packet.set_dont_free();
+    }
+
+    /**
+     * @brief Limits the incoming and outgoing bandwidth for the host.
+     *
+     * This function sets the maximum incoming and outgoing bandwidth for the
+     * host, which can help manage network traffic. Setting either value to 0
+     * disables bandwidth limitation for that direction.
+     *
+     * @param incoming_bandwidth The maximum incoming bandwidth in bytes per
+     * second.
+     * @param outgoing_bandwidth The maximum outgoing bandwidth in bytes per
+     * second.
+     */
+    void bandwidth_limit(uint32 incoming_bandwith, uint32 outgoing_bandwidth) {
+        enet_host_bandwidth_limit(m_host, incoming_bandwith,
+                                  outgoing_bandwidth);
+    }
+
+    /**
+     * @brief Throttles the bandwidth used by the host.
+     *
+     * This function performs bandwidth throttling by adjusting the packet
+     * delivery schedule based on the network conditions. It is useful for
+     * managing network congestion.
+     */
+    void bandwidth_throttle() { enet_host_bandwidth_throttle(m_host); }
+
+    /**
+     * @brief Sets the maximum number of channels for the host.
+     *
+     * This function limits the number of channels that peers can use to
+     * communicate with the host. Any peers attempting to communicate on
+     * channels higher than this limit will be restricted.
+     *
+     * @param channel_limit The maximum number of channels.
+     */
+    void channel_limit(size_t channel_limit) {
+        enet_host_channel_limit(m_host, channel_limit);
+    }
+
+    /**
+     * @brief Retrieves the underlying ENetHost pointer.
+     *
+     * This function returns a pointer to the underlying ENetHost, allowing
+     * direct access to the ENetHost structure for more advanced operations.
+     *
+     * @return A pointer to the ENetHost structure.
+     */
+    ENetHost* get() { return m_host; }
+
+    /**
      * @brief Handles connection events.
      * @param event The connection event.
      */
