@@ -429,9 +429,12 @@ class Host {
     /**
      * @brief Destructor for Host.
      *
-     * Destroys the underlying ENetHost object.
+     * FLushes the host and then destroys the underlying ENetHost object.
      */
-    ~Host() { enet_host_destroy(m_host); }
+    ~Host() {
+        flush();
+        enet_host_destroy(m_host);
+    }
 
     /**
      * @brief Services the host to check for network events.
@@ -522,6 +525,26 @@ class Host {
                   << event.channel() << std::endl;
     }
 };
+
+/**
+ * @brief Initializes the ENet library.
+ *
+ * This function initializes the ENet networking library. It throws a
+ * `std::runtime_error` if the initialization fails. The function also
+ * registers `enet_deinitialize` to be called automatically when the
+ * program exits, ensuring that resources are cleaned up properly.
+ *
+ * @throws std::runtime_error If ENet initialization fails.
+ *
+ * @note This function should be called before any ENet operations are
+ * performed.
+ */
+static inline void initialize() {
+    if (enet_initialize() != 0) {
+        throw std::runtime_error("An error occurred while initializing ENet.");
+    }
+    atexit(enet_deinitialize);
+}
 
 } // namespace enetcpp
 

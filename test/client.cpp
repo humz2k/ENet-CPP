@@ -4,6 +4,8 @@
 #include <string>
 
 int main() {
+    enetcpp::initialize();
+
     PingPong host(1);
     host.set_count(9);
 
@@ -16,7 +18,7 @@ int main() {
     while (host.count()) {
         host.service(100);
     }
-
+    peer.disconnect();
     host.flush();
     return 0;
 }
