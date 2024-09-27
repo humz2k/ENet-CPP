@@ -7,7 +7,7 @@ Either just copy and paste `include/enetcpp/enetcpp.hpp` somewhere in your proje
 
 # Usage
 
-See `include/enetcpp/enetcpp.hpp` for documentation, but here is a simple example.
+See `include/enetcpp/enetcpp.hpp` for documentation, but here is a simple example. For a multi-threaded example, see `test/mt_test_server.hpp`.
 
 ## Server
 
