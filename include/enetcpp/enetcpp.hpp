@@ -71,15 +71,13 @@ For more information, please refer to <https://unlicense.org>
 namespace enetcpp {
 
 /** @brief Type alias for ENet 8-bit unsigned integer */
-typedef enet_uint8 uint8;
+using uint8 = enet_uint8;
 
 /** @brief Type alias for ENet 16-bit unsigned integer */
-typedef enet_uint16 uint16;
+using uint16 = enet_uint16;
 
 /** @brief Type alias for ENet 32-bit unsigned integer */
-typedef enet_uint32 uint32;
-
-enum LogLevel { NONE, MINIMAL, INFO, DEBUG, TRACE };
+using uint32 = enet_uint32;
 
 /**
  * @brief A simple logger class for logging and tracing within the ENetCPP
@@ -97,24 +95,9 @@ enum LogLevel { NONE, MINIMAL, INFO, DEBUG, TRACE };
  *  - NONE: No logging.
  */
 class Logger {
-  private:
-    std::string m_filename;
-    LogLevel m_loglevel;
-
-    /**
-     * @brief Prints the current timestamp to the log.
-     */
-    void print_time() {
-        time_t rawtime;
-        struct tm* timeinfo;
-        char buffer[80];
-        time(&rawtime);
-        timeinfo = localtime(&rawtime);
-        strftime(buffer, sizeof(buffer), "%d-%m-%Y %H:%M:%S", timeinfo);
-        printf("[%s] : ", buffer);
-    }
-
   public:
+    enum LogLevel { NONE, MINIMAL, INFO, DEBUG, TRACE };
+
     /**
      * @brief Constructs a Logger with the given log level.
      * @param loglevel The log level to use (defaults to INFO).
@@ -133,12 +116,7 @@ class Logger {
      * @param args Arguments for the format string.
      */
     template <typename... Args> void trace(const char* fmt, Args... args) {
-        if (m_loglevel < TRACE)
-            return;
-        print_time();
-        printf("TRACE: ");
-        printf(fmt, args...);
-        printf("\n");
+        log(TRACE, "TRACE", fmt, args...);
     }
 
     /**
@@ -147,12 +125,7 @@ class Logger {
      * @param args Arguments for the format string.
      */
     template <typename... Args> void debug(const char* fmt, Args... args) {
-        if (m_loglevel < DEBUG)
-            return;
-        print_time();
-        printf("DEBUG: ");
-        printf(fmt, args...);
-        printf("\n");
+        log(DEBUG, "DEBUG", fmt, args...);
     }
 
     /**
@@ -161,12 +134,7 @@ class Logger {
      * @param args Arguments for the format string.
      */
     template <typename... Args> void info(const char* fmt, Args... args) {
-        if (m_loglevel < INFO)
-            return;
-        print_time();
-        printf("INFO: ");
-        printf(fmt, args...);
-        printf("\n");
+        log(INFO, "INFO", fmt, args...);
     }
 
     /**
@@ -175,10 +143,31 @@ class Logger {
      * @param args Arguments for the format string.
      */
     template <typename... Args> void minimal(const char* fmt, Args... args) {
-        if (m_loglevel < MINIMAL)
+        log(MINIMAL, "MINIMAL", fmt, args...);
+    }
+
+  private:
+    LogLevel m_loglevel;
+
+    /**
+     * @brief Prints the current timestamp to the log.
+     */
+    void print_time() {
+        time_t rawtime;
+        struct tm* timeinfo;
+        char buffer[80];
+        time(&rawtime);
+        timeinfo = localtime(&rawtime);
+        strftime(buffer, sizeof(buffer), "%d-%m-%Y %H:%M:%S", timeinfo);
+        printf("[%s] : ", buffer);
+    }
+
+    template <typename... Args>
+    void log(LogLevel level, const char* tag, const char* fmt, Args... args) {
+        if (m_loglevel < level)
             return;
         print_time();
-        printf("MINIMAL: ");
+        printf("%s: ", tag);
         printf(fmt, args...);
         printf("\n");
     }
@@ -266,7 +255,7 @@ class Address {
 class Packet {
   private:
     ENetPacket* m_packet;
-    bool m_dont_free = false;
+    bool m_owns_memory = true;
 
   public:
     /**
@@ -287,19 +276,24 @@ class Packet {
 
     /**
      * @brief Prevents the packet from being freed when destroyed.
+     *
+     * We need this because, in the event that the packet is sent successfully,
+     * ENet will free the packet for us, and we want to prevent deep copying the
+     * packet.
+     *
      */
-    void set_dont_free() { m_dont_free = true; }
+    void release_ownership() { m_owns_memory = false; }
 
     /**
      * @brief Destroys the packet unless flagged with `set_dont_free()`.
      */
     ~Packet() {
-        if (!m_dont_free)
+        if (m_owns_memory)
             enet_packet_destroy(m_packet);
     }
 
     void destroy() {
-        set_dont_free();
+        release_ownership();
         enet_packet_destroy(m_packet);
     }
 
@@ -368,7 +362,7 @@ class Peer {
      */
     void send(Packet& packet) {
         if (enet_peer_send(m_peer, 0, packet.get()) == 0) {
-            packet.set_dont_free();
+            packet.release_ownership();
             return;
         }
         throw std::runtime_error("Packet send failed");
@@ -488,7 +482,6 @@ class Host {
     Address m_address;
     ENetHost* m_host;
     bool m_is_server;
-    std::vector<ENetPeer*> m_peers;
     Logger m_logger;
 
     /**
@@ -562,13 +555,18 @@ class Host {
 
     /**
      * @brief Services the host to check for network events.
-     * @param timeout The maximum time to wait for an event, in milliseconds.
+     * @param timeout The maximum time to wait for an event, in milliseconds -
+     * locks the mutex for `timeout` seconds.
      * @return The result of the ENet service call.
      */
     int service(uint32 timeout = 0) {
         m_logger.trace("servicing ENet host");
         ENetEvent event;
-        int rc = enet_host_service(m_host, &event, timeout);
+        int rc;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            rc = enet_host_service(m_host, &event, timeout);
+        }
         if (rc > 0) {
             switch (event.type) {
             case ENET_EVENT_TYPE_CONNECT:
@@ -596,6 +594,9 @@ class Host {
 
     /**
      * @brief Initiates a connection to a remote address.
+     *
+     * This is thread safe.
+     *
      * @param address The remote Address to connect to.
      * @param channels The number of channels to use.
      * @param data Optional data to associate with the connection.
@@ -606,21 +607,23 @@ class Host {
     Peer connect(Address address, size_t channels = 1, uint32 data = 0,
                  uint32 timeout = 5000) {
         m_logger.debug("Connecting to %x:%u", address.host(), address.port());
-        std::lock_guard<std::mutex> lock(m_mutex);
-        ENetPeer* peer =
-            enet_host_connect(m_host, address.get(), channels, data);
-        if (peer == NULL) {
-            throw std::runtime_error(
-                "No available peers for initiating an ENet connection.");
-        }
-        ENetEvent event;
-        if (!((enet_host_service(m_host, &event, timeout) > 0) &&
-              (event.type == ENET_EVENT_TYPE_CONNECT))) {
-            enet_peer_reset(peer);
-            throw std::runtime_error("Connection failed");
+        ENetPeer* peer;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            peer = enet_host_connect(m_host, address.get(), channels, data);
+            if (peer == NULL) {
+                throw std::runtime_error(
+                    "No available peers for initiating an ENet connection.");
+            }
+            ENetEvent event;
+            if (!((enet_host_service(m_host, &event, timeout) > 0) &&
+                  (event.type == ENET_EVENT_TYPE_CONNECT))) {
+                enet_peer_reset(peer);
+                throw std::runtime_error("Connection failed");
+            }
         }
         flush();
-        m_peers.push_back(peer);
+
         return Peer(peer);
     }
 
@@ -629,6 +632,7 @@ class Host {
      */
     void flush() {
         m_logger.trace("flushing ENet host");
+        std::lock_guard<std::mutex> lock(m_mutex);
         enet_host_flush(m_host);
     }
 
@@ -648,7 +652,7 @@ class Host {
                        packet.length());
         std::lock_guard<std::mutex> lock(m_mutex);
         enet_host_broadcast(m_host, channel, packet.get());
-        packet.set_dont_free();
+        packet.release_ownership();
     }
 
     /**

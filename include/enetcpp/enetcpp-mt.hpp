@@ -60,13 +60,13 @@ namespace enetcpp {
 /**
  * @brief A thread class for managing individual peer connections.
  *
- * The `ConnectionThread` class is responsible for handling a single peer connection
- * in its own thread. It processes incoming packets asynchronously and manages the
- * connection's lifecycle, including queuing and dequeuing packets, sleeping, and waking
- * based on network events.
+ * The `ConnectionThread` class is responsible for handling a single peer
+ * connection in its own thread. It processes incoming packets asynchronously
+ * and manages the connection's lifecycle, including queuing and dequeuing
+ * packets, sleeping, and waking based on network events.
  *
- * This class is designed to be extended for custom packet handling by overriding
- * the `handle()` method.
+ * This class is designed to be extended for custom packet handling by
+ * overriding the `handle()` method.
  */
 class ConnectionThread {
   private:
@@ -100,7 +100,8 @@ class ConnectionThread {
     /**
      * @brief Wakes the connection thread.
      *
-     * This method signals the thread to wake up and process any queued packets or tasks.
+     * This method signals the thread to wake up and process any queued packets
+     * or tasks.
      */
     void wake() {
         {
@@ -168,7 +169,8 @@ class ConnectionThread {
 
     /**
      * @brief Dequeues a packet from the queue.
-     * @return Pointer to the dequeued ENetPacket, or NULL if the queue is empty.
+     * @return Pointer to the dequeued ENetPacket, or NULL if the queue is
+     * empty.
      */
     ENetPacket* dequeue_packet() {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -182,8 +184,8 @@ class ConnectionThread {
     /**
      * @brief Signals the connection thread to quit.
      *
-     * This method sets the `m_should_quit` flag, indicating that the thread should
-     * stop running after completing its current tasks.
+     * This method sets the `m_should_quit` flag, indicating that the thread
+     * should stop running after completing its current tasks.
      */
     void quit() {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -211,8 +213,8 @@ class ConnectionThread {
     /**
      * @brief Handles a received packet.
      *
-     * This method is intended to be overridden in derived classes to provide custom
-     * packet handling logic.
+     * This method is intended to be overridden in derived classes to provide
+     * custom packet handling logic.
      * @param packet The received Packet to handle.
      */
     virtual void handle(Packet& packet) {}
@@ -247,14 +249,16 @@ class ConnectionThread {
 /**
  * @brief Multi-threaded host class for managing multiple connection threads.
  *
- * The `HostMT` class extends the `Host` class to manage multiple `ConnectionThread` objects,
- * each of which handles a single peer connection in a separate thread. It manages
- * the lifecycle of connections, including connection, disconnection, and packet reception.
+ * The `HostMT` class extends the `Host` class to manage multiple
+ * `ConnectionThread` objects, each of which handles a single peer connection in
+ * a separate thread. It manages the lifecycle of connections, including
+ * connection, disconnection, and packet reception.
  *
- * This class uses a template parameter `ConnectionThread_t` to specify the type of
- * connection thread to use, allowing for custom behavior.
+ * This class uses a template parameter `ConnectionThread_t` to specify the type
+ * of connection thread to use, allowing for custom behavior.
  *
- * @tparam ConnectionThread_t The type of connection thread to use (derived from `ConnectionThread`).
+ * @tparam ConnectionThread_t The type of connection thread to use (derived from
+ * `ConnectionThread`).
  */
 template <typename ConnectionThread_t> class HostMT : public Host {
   private:
@@ -266,7 +270,8 @@ template <typename ConnectionThread_t> class HostMT : public Host {
     using Host::Host;
 
     /**
-     * @brief Handles a connection event by creating and launching a new connection thread.
+     * @brief Handles a connection event by creating and launching a new
+     * connection thread.
      * @param event The connection event.
      */
     void on_event(EventConnect& event) override {
@@ -277,7 +282,8 @@ template <typename ConnectionThread_t> class HostMT : public Host {
     }
 
     /**
-     * @brief Handles a disconnection event by stopping and joining the connection thread.
+     * @brief Handles a disconnection event by stopping and joining the
+     * connection thread.
      * @param event The disconnection event.
      */
     void on_event(EventDisconnect& event) override {
@@ -285,14 +291,16 @@ template <typename ConnectionThread_t> class HostMT : public Host {
         connection->quit();
         connection->wake();
         connection->join();
+        delete connection;
     }
 
     /**
-     * @brief Handles a packet reception event by queueing the packet in the corresponding connection thread.
+     * @brief Handles a packet reception event by queueing the packet in the
+     * corresponding connection thread.
      * @param event The packet reception event.
      */
     void on_event(EventReceive& event) override {
-        event.packet().set_dont_free();
+        event.packet().release_ownership();
         ConnectionThread_t* connection = (ConnectionThread_t*)event.peer_data();
         connection->queue_packet(event.packet().get());
         connection->wake();
@@ -301,12 +309,12 @@ template <typename ConnectionThread_t> class HostMT : public Host {
     /**
      * @brief Runs the main loop for the host, servicing network events.
      *
-     * The host processes network events and flushes the network state in this loop.
-     * The loop runs until `should_quit()` returns `true`.
+     * The host processes network events and flushes the network state in this
+     * loop. The loop runs until `should_quit()` returns `true`.
      */
     void run() {
         while (!should_quit()) {
-            service(100);
+            service(10);
             flush();
         }
     }
@@ -343,7 +351,8 @@ template <typename ConnectionThread_t> class HostMT : public Host {
     }
 
     /**
-     * @brief Launches the host's main thread and starts servicing network events.
+     * @brief Launches the host's main thread and starts servicing network
+     * events.
      */
     void launch() {
         m_launched = true;

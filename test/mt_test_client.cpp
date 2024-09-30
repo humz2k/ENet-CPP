@@ -13,7 +13,7 @@ class MyClient : public enetcpp::Host {
 int main() {
     enetcpp::initialize();
     MyClient client(1);
-    client.logger().set_loglevel(enetcpp::LogLevel::NONE);
+    client.logger().set_loglevel(enetcpp::Logger::LogLevel::NONE);
     auto connection = client.connect(enetcpp::Address("127.0.0.1", 12345));
 
     while (true) {
