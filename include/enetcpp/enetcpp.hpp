@@ -67,6 +67,8 @@ For more information, please refer to <https://unlicense.org>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <mutex>
+#include <thread>
 
 namespace enetcpp {
 
